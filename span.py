@@ -1,15 +1,14 @@
 import os
-
 import numpy as np
 import scipy
 from scipy.special import logsumexp
+import math
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import *
 from torch.distributions import Dirichlet
-
 from torch.nn.utils import clip_grad_norm_, clip_grad_value_
 
 from layers import NBModule, SPModule
@@ -17,7 +16,8 @@ from layers import NBModule, SPModule
 
 class Span(nn.Module):
     def __init__(self, n_samples, n_genes, n_label, rho, Y, S, 
-                 Z_neighbor_idx, n_cov  = 0, cov_matrix = None, batch_size = -1,
+                 Z_neighbor_idx, Phi=3,
+                 n_cov  = 0, cov_matrix = None, batch_size = -1,
                  B = 10, min_log_delta = 1e-6, random_b_g_0  = False,
                  device = 'cuda',
         ):
@@ -40,7 +40,7 @@ class Span(nn.Module):
         self.Z_neighbor_idx = Z_neighbor_idx
         
         # init parameter for SPModule    
-        self.pt = np.ones(self.n_labels + self.n_labels * (self.n_labels - 1) //2 ) * 3
+        self.pt = np.ones(self.n_labels + self.n_labels * (self.n_labels - 1) //2 ) * Phi
         
         self.module = NBModule(
             n_genes=self.n_genes,
@@ -106,7 +106,6 @@ class Span(nn.Module):
         
         for ii in range(1, max_iter+1):
             loss_val = 0
-            #np.random.shuffle(sample_indices)
             for batch_idx in range(num_batch):
                 
                 batch_indices = sample_indices[batch_idx*self.batch_size : min((batch_idx+1)*self.batch_size, num)]
@@ -118,7 +117,7 @@ class Span(nn.Module):
                 
                 loss = self.spm.loss(Z_current_batch, Z_neighbor_count_batch, r_batch) 
             loss_val = loss_val + loss
-            
+            loss_val = loss_val / num
             self.spm.zero_grad()
             loss_val.backward()
             optim_adam_spm.step()
@@ -188,6 +187,8 @@ class Span(nn.Module):
             self.batch_size = num
         num_batch = int(math.ceil(1.0*num/self.batch_size))
         
+        z_prev = None
+        
         for i in range(max_iter_em):
             
             self.eval()
@@ -199,7 +200,6 @@ class Span(nn.Module):
                 St_batch = self.St[batch_indices]
                 cov_batch = None if self.cov_matrix is None else self.cov_matrix[batch_indices]
 
-                #pdb.set_trace()
                 dic = self.module.generate(Yt_batch, St_batch, cov_matrix = cov_batch, pre_train = True)
                 gamma_fixed = dic["gamma"].detach()
                 gamma_fixed = gamma_fixed+1e-6
@@ -223,7 +223,7 @@ class Span(nn.Module):
             while( (j <= min_iter_adam) or ( (j < max_iter_adam)  and  (loss_diff > rel_tol_adam ) ) ):
                 j += 1
                 loss_val_new = 0
-                
+
                 for batch_idx in range(num_batch):
                     batch_indices = sample_indices[batch_idx*self.batch_size : min((batch_idx+1)*self.batch_size, num)]
 
@@ -239,7 +239,7 @@ class Span(nn.Module):
                     
                 loss_val_new = loss_val_new/self.n_samples
                 self.zero_grad()
-                loss.backward()
+                loss_val_new.backward()
                 clip_grad_norm_(self.parameters(), 1-1e-5, 2)
                 optim_adam.step()
                 
@@ -254,13 +254,20 @@ class Span(nn.Module):
             print('epoch {} loss: {}'.format(i,loss_val))
             self.encode_batch(y_true)
  
+            if (y_true is not None):
+                print("pretrain acc, ".format(i),  np.mean(y_true == self.Z_current ) )
+            
+            if(z_prev is not None):
+                print('delta, {}'.format(np.mean(z_prev != self.Z_current)) )
+                if( np.mean(z_prev != self.Z_current) < 0.001):
+                    break
                 
+            z_prev = self.Z_current
+        
+        print('')
+    
     
     def train_model(self, min_iter_em = 2, max_iter_em = 20, min_iter_adam = 100, max_iter_adam = 600, rel_tol_adam = 1e-4, lr_adam = 1e-2, lr_z = 3e-4,  y_true = None):
-        
-        loss_hist = []
-        acc_hist =  []
-        cluster_hist = []
         
         optim_adam = optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=lr_adam, amsgrad=True)
         optim_adam_spm = optim.Adam(filter(lambda p: p.requires_grad, self.spm.parameters()), lr=lr_z, amsgrad=True)
@@ -271,6 +278,7 @@ class Span(nn.Module):
             self.batch_size = num
         num_batch = int(math.ceil(1.0*num/self.batch_size))
     
+        z_prev = None
         self.train()   
         for i in range(max_iter_em):  
             loss_diff = rel_tol_adam + 1
@@ -300,7 +308,7 @@ class Span(nn.Module):
                     
                 loss_val_new = loss_val_new/self.n_samples
                 self.zero_grad()
-                loss.backward()#retain_graph=True
+                loss_val_new.backward()#retain_graph=True
                 clip_grad_norm_(self.parameters(), 1-1e-5, 2)
                 optim_adam.step()
                 
@@ -314,15 +322,16 @@ class Span(nn.Module):
             
             loss_s = self.updateZ(optim_adam_spm, lr_z)
             
-            cluster_hist.append( self.Z_current )
             if (y_true is not None):
                 print("epoch {} acc, ".format(i),  np.mean(y_true == self.Z_current ) )
             else:
                 print("epoch {}".format(i))
-            y_prev = self.Z_current
- 
+
+            if(z_prev is not None):
+                if( np.mean(z_prev != self.Z_current) < 0.001):
+                    break
     
-    
-   
+            z_prev = self.Z_current
+
 
 

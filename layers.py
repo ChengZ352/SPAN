@@ -82,9 +82,7 @@ class NBModule(nn.Module):
         # compute beta (covariate coefficent)
         # cov_matrix (n,p)
         if cov_matrix is not None:
-            covariates = torch.einsum("np,gp->gn", cov_matrix, self.beta)  # (g, n)
-            covariates = torch.transpose(covariates, 0, 1).unsqueeze(-1)  # (n, g, 1)
-            covariates = covariates.expand(n_samples, self.n_genes, self.n_labels)
+            covariates = torch.einsum("np,gp->ng", cov_matrix, self.beta).unsqueeze(-1)   # (g, n, 1)
             base_mean = base_mean + covariates
 
         # base gene expression
