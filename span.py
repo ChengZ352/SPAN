@@ -86,7 +86,7 @@ class Span(nn.Module):
         alpha_beta_mu = alpha[np.newaxis,:] - beta_mu
         denominator = logsumexp(alpha_beta_mu, axis = 1, keepdims = True) #[n, 1]
         result = alpha_beta_mu - denominator
-        return result # alpha_beta_mu
+        return result 
 
  
     
@@ -205,7 +205,6 @@ class Span(nn.Module):
                 gamma_fixed = gamma_fixed+1e-6
                 gamma_fixed = gamma_fixed/torch.sum(gamma_fixed, axis = 1, keepdims = True)
 
-                ##adjust bad init
                 if(i==0):
                     d = Dirichlet(torch.tensor([1/self.n_labels]*self.n_labels))
                     gamma_fixed = d.sample([batch_indices.shape[0]]).to(self.device)
