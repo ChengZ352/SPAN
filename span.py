@@ -49,7 +49,8 @@ class Span(nn.Module):
             basis_means=basis_means,
             b_g_0=col_means_normalized,
             random_b_g_0 = random_b_g_0,
-            n_cov = n_cov)
+            n_cov = n_cov,
+            B=B)
         
         self.spm = SPModule(self.n_labels, self.pt[:self.n_labels], self.pt[self.n_labels:], device)
         

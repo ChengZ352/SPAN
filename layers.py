@@ -11,20 +11,21 @@ from nb import NegativeBinomial
 
 LOWER_BOUND = 1e-10
 THETA_LOWER_BOUND = 1e-20
-B = 10
 
 
 class NBModule(nn.Module):
     def __init__(self, n_genes, n_labels, 
                  rho, basis_means,
                  b_g_0  = None, random_b_g_0 = False,
-                 n_cov = 0):
+                 n_cov = 0,
+                 B=10):
         
         super(NBModule, self).__init__()
         
         self.n_genes = n_genes
         self.n_labels = n_labels
         self.n_cov = n_cov
+        self.B = B
 
         self.register_buffer("rho", rho)
 
@@ -50,7 +51,7 @@ class NBModule(nn.Module):
         self.delta_log_mean = torch.nn.Parameter( torch.zeros( 1, ) )
         self.delta_log_scale = torch.nn.Parameter( torch.ones( 1, ) )
 
-        self.log_a = torch.nn.Parameter(torch.zeros(B))
+        self.log_a = torch.nn.Parameter(torch.zeros(self.B))
 
         if self.n_cov == 0:
             self.beta = None
@@ -94,12 +95,13 @@ class NBModule(nn.Module):
         mu_ngc = torch.exp(log_mu_ngc)  # (n, g, c)
 
         a = torch.exp(self.log_a)  # (B)
-        a = a.expand(n_samples, self.n_genes, self.n_labels, B)
+        a = a.expand(n_samples, self.n_genes, self.n_labels, self.B)
         b_init = 2 * ((self.basis_means[1] - self.basis_means[0]) ** 2)
-        b = torch.exp(torch.ones(B, device=x.device) * (-torch.log(b_init)))  # (B)
-        b = b.expand(n_samples, self.n_genes, self.n_labels, B)
-        mu_ngcb = mu_ngc.unsqueeze(-1).expand( n_samples, self.n_genes, self.n_labels, B )  # (n, g, c, B)
-        basis_means = self.basis_means.expand( n_samples, self.n_genes, self.n_labels, B )  # (n, g, c, B)
+        b = torch.exp(torch.ones(self.B, device=x.device) * (-torch.log(b_init)))  # (B)
+        b = b.expand(n_samples, self.n_genes, self.n_labels, self.B)
+        
+        mu_ngcb = mu_ngc.unsqueeze(-1).expand( n_samples, self.n_genes, self.n_labels, self.B )  # (n, g, c, B)
+        basis_means = self.basis_means.expand( n_samples, self.n_genes, self.n_labels, self.B )  # (n, g, c, B)
         phi = (  # (n, g, c)
             torch.sum(a * torch.exp(-b * torch.square(mu_ngcb - basis_means)), 3)
             + LOWER_BOUND

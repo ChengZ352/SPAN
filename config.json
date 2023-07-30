@@ -1,0 +1,1 @@
+{"batch_size": -1, "max_iter_em_pretrain": 1, "min_iter_adam_pretrain": 3, "max_iter_adam_pretrain": 300, "lr_adam": 0.01, "rel_tol_adam": 0.001, "max_iter_em_train": 30, "min_iter_adam_train": 10, "max_iter_adam_train": 600, "device": "cuda"}

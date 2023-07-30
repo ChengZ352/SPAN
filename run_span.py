@@ -59,7 +59,7 @@ if __name__ == "__main__":
         
     model = Span(Y.shape[0], rho.shape[0], rho.shape[1], rho, Y, S, Z_neighbor_idx,
                     n_cov  = n_cov, cov_matrix = batch_matrix, 
-                    batch_size = args.batch_size).to(args.device)
+                    batch_size = args.batch_size, B = 10).to(args.device)
         
     model.pre_train_model(max_iter_em = args.max_iter_em_pretrain, min_iter_adam = args.min_iter_adam_pretrain, 
                           max_iter_adam = args.max_iter_adam_pretrain, lr_adam = args.lr_adam,
